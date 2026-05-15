@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web GIS Semenanjung Macau - Fasilitas Kesehatan & Jaringan Jalan</title>
+<meta name="description" content="Peta interaktif fasilitas kesehatan dan jaringan jalan di Semenanjung Macau">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#1a1a2e;overflow:hidden}
+#map{position:absolute;top:0;left:0;width:100%;height:100vh;z-index:1}
+.sidebar{position:fixed;top:0;left:0;width:320px;height:100vh;z-index:1000;background:linear-gradient(180deg,#0f172a 0%,#1e293b 100%);border-right:1px solid rgba(99,102,241,0.2);display:flex;flex-direction:column;transition:transform 0.3s ease;overflow:hidden}
+.sidebar.hidden{transform:translateX(-320px)}
+.sidebar-header{padding:20px;border-bottom:1px solid rgba(99,102,241,0.15)}
+.sidebar-header h1{font-size:15px;font-weight:800;background:linear-gradient(90deg,#a5b4fc,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:2px}
+.sidebar-header p{font-size:11px;color:#64748b}
+.search-box{padding:12px 20px}
+.search-box input{width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(99,102,241,0.25);background:rgba(30,41,59,0.8);color:#e2e8f0;font-size:13px;font-family:'Inter',sans-serif;outline:none;transition:border-color 0.2s}
+.search-box input:focus{border-color:#6366f1}
+.search-box input::placeholder{color:#475569}
+.results-list{flex:1;overflow-y:auto;padding:4px 12px}
+.results-list::-webkit-scrollbar{width:4px}
+.results-list::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+.result-item{padding:10px 12px;border-radius:10px;cursor:pointer;margin-bottom:4px;transition:background 0.2s;display:flex;align-items:center;gap:10px}
+.result-item:hover{background:rgba(99,102,241,0.15)}
+.result-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid rgba(0,0,0,0.3);position:relative}
+.result-dot::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:4px;height:4px;border-radius:50%;background:#000}
+.result-name{font-size:12px;color:#cbd5e1;font-weight:500}
+.result-type{font-size:10px;color:#64748b;text-transform:capitalize}
+.stats-panel{padding:16px 20px;border-top:1px solid rgba(99,102,241,0.15)}
+.stats-panel h3{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:700}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.stat-box{background:rgba(30,41,59,0.6);border-radius:10px;padding:10px 8px;text-align:center;border:1px solid rgba(99,102,241,0.1)}
+.stat-num{font-size:20px;font-weight:800;background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
+.toggle-btn{position:fixed;top:12px;left:12px;z-index:1001;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;font-size:18px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(99,102,241,0.4)}
+.legend-box{position:fixed;top:12px;right:12px;z-index:1000;background:linear-gradient(135deg,rgba(15,23,42,0.95),rgba(30,41,59,0.92));backdrop-filter:blur(16px);border-radius:14px;padding:14px 16px;border:1px solid rgba(99,102,241,0.2);box-shadow:0 8px 30px rgba(0,0,0,0.4);max-height:calc(100vh - 24px);overflow-y:auto}
+.legend-box h3{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:700}
+.legend-section{margin-bottom:10px}
+.legend-section h4{font-size:10px;color:#64748b;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.legend-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.lg-circle{width:14px;height:14px;border-radius:50%;position:relative;flex-shrink:0}
+.lg-circle::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#000}
+.lg-line{height:3px;border-radius:2px;flex-shrink:0;background:#999}
+.lg-label{font-size:11px;color:#94a3b8}
+.leaflet-popup-content-wrapper{background:linear-gradient(135deg,#1e293b,#334155)!important;border-radius:12px!important;border:1px solid rgba(99,102,241,0.3)!important;box-shadow:0 12px 40px rgba(0,0,0,0.5)!important}
+.leaflet-popup-tip{background:#334155!important}
+.leaflet-popup-content{margin:12px 14px!important;color:#e2e8f0!important}
+.popup-tbl{width:100%;border-collapse:collapse}
+.popup-tbl caption{font-size:14px;font-weight:700;text-align:left;padding-bottom:8px;background:linear-gradient(90deg,#a5b4fc,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.popup-tbl td{padding:5px 8px;font-size:12px;border-bottom:1px solid rgba(99,102,241,0.1)}
+.popup-tbl td:first-child{color:#64748b;font-weight:600;white-space:nowrap}
+.popup-tbl td:last-child{color:#cbd5e1}
+.popup-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
+.leaflet-control-zoom a{background:rgba(15,23,42,0.9)!important;color:#a5b4fc!important;border-color:rgba(99,102,241,0.3)!important}
+.leaflet-control-zoom a:hover{background:rgba(99,102,241,0.3)!important;color:#fff!important}
+@media(max-width:768px){
+.sidebar{width:280px}
+.sidebar.hidden{transform:translateX(-280px)}
+.toggle-btn{display:flex}
+.legend-box{right:8px;top:60px;padding:10px 12px;max-width:160px}
+}
+</style>
+</head>
+<body>
+<button class="toggle-btn" id="toggleBtn" onclick="document.querySelector('.sidebar').classList.toggle('hidden')">&#9776;</button>
+<div class="sidebar" id="sidebar">
+<div class="sidebar-header"><h1>&#127973; Web GIS Macau Peninsula</h1><p>Fasilitas Kesehatan &amp; Jaringan Jalan</p></div>
+<div class="search-box"><input type="text" id="searchInput" placeholder="&#128269; Cari fasilitas kesehatan..."></div>
+<div class="results-list" id="resultsList"></div>
+<div class="stats-panel"><h3>Statistik</h3><div class="stats-grid"><div class="stat-box"><div class="stat-num" id="sH">0</div><div class="stat-lbl">Rumah Sakit</div></div><div class="stat-box"><div class="stat-num" id="sC">0</div><div class="stat-lbl">Klinik</div></div><div class="stat-box"><div class="stat-num" id="sP">0</div><div class="stat-lbl">Farmasi</div></div></div></div>
+</div>
+<div class="legend-box">
+<h3>Legenda</h3>
+<div class="legend-section"><h4>Fasilitas Kesehatan</h4>
+<div class="legend-row"><div class="lg-circle" style="background:#FF0000"></div><span class="lg-label">Hospital</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#00BFFF"></div><span class="lg-label">Clinic</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#CCFF00"></div><span class="lg-label">Pharmacy</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#00CED1"></div><span class="lg-label">Doctor</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#FFA500"></div><span class="lg-label">Dentist</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#0000FF"></div><span class="lg-label">Audiologist</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#00FF00"></div><span class="lg-label">Blood Donation</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#FFFF00"></div><span class="lg-label">Hospice</span></div>
+<div class="legend-row"><div class="lg-circle" style="background:#FF4500"></div><span class="lg-label">Laboratory</span></div>
+</div>
+<div class="legend-section"><h4>Jaringan Jalan</h4>
+<div class="legend-row"><div class="lg-line" style="width:30px;height:5px"></div><span class="lg-label">Motorway</span></div>
+<div class="legend-row"><div class="lg-line" style="width:26px;height:4px"></div><span class="lg-label">Primary</span></div>
+<div class="legend-row"><div class="lg-line" style="width:22px;height:3px"></div><span class="lg-label">Secondary</span></div>
+<div class="legend-row"><div class="lg-line" style="width:18px;height:2px"></div><span class="lg-label">Tertiary</span></div>
+<div class="legend-row"><div class="lg-line" style="width:14px;height:1px"></div><span class="lg-label">Residential</span></div>
+</div>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map=L.map('map',{center:[22.198,113.544],zoom:14,zoomControl:false});
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+attribution:'&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+subdomains:'abcd',maxZoom:19}).addTo(map);
+
+var TC={hospital:'#FF0000',clinic:'#00BFFF',pharmacy:'#CCFF00',doctor:'#00CED1',dentist:'#FFA500',audiologist:'#0000FF',blood_donation:'#00FF00',hospice:'#FFFF00',laboratory:'#FF4500'};
+var TL={hospital:'Rumah Sakit',clinic:'Klinik',pharmacy:'Apotek',doctor:'Dokter',dentist:'Dokter Gigi',audiologist:'Audiolog',blood_donation:'Donor Darah',hospice:'Hospis',laboratory:'Laboratorium'};
+var RW={motorway:5,primary:4,secondary:3,tertiary:2,residential:1};
+
+var hData={"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"Hospital Conde S. Januário","type":"hospital","address":"Estrada do Visconde de S. Januário"},"geometry":{"type":"Point","coordinates":[113.5477,22.1945]}},
+{"type":"Feature","properties":{"name":"Hospital Kiang Wu","type":"hospital","address":"Rua de Coelho do Amaral"},"geometry":{"type":"Point","coordinates":[113.5415,22.1985]}},
+{"type":"Feature","properties":{"name":"Hospital Universitário de Macau","type":"hospital","address":"Avenida da Universidade"},"geometry":{"type":"Point","coordinates":[113.5440,22.1910]}},
+{"type":"Feature","properties":{"name":"Clínica de Saúde Tap Seac","type":"clinic","address":"Av. Conselheiro Ferreira de Almeida"},"geometry":{"type":"Point","coordinates":[113.5465,22.1990]}},
+{"type":"Feature","properties":{"name":"Clínica São Januário","type":"clinic","address":"Rua de Cinco de Outubro"},"geometry":{"type":"Point","coordinates":[113.5395,22.1925]}},
+{"type":"Feature","properties":{"name":"Clínica Popular Macau","type":"clinic","address":"Rua do Campo"},"geometry":{"type":"Point","coordinates":[113.5450,22.1960]}},
+{"type":"Feature","properties":{"name":"Clínica Fai Chi Kei","type":"clinic","address":"Rua Nova do Patane"},"geometry":{"type":"Point","coordinates":[113.5365,22.2035]}},
+{"type":"Feature","properties":{"name":"Clínica Areia Preta","type":"clinic","address":"Rua do Pátio do Sol"},"geometry":{"type":"Point","coordinates":[113.5530,22.2070]}},
+{"type":"Feature","properties":{"name":"Clínica Flora Sintra","type":"clinic","address":"Rua da Flora Sintra"},"geometry":{"type":"Point","coordinates":[113.5388,22.1950]}},
+{"type":"Feature","properties":{"name":"Farmácia Popular","type":"pharmacy","address":"Av. de Almeida Ribeiro 42"},"geometry":{"type":"Point","coordinates":[113.5400,22.1932]}},
+{"type":"Feature","properties":{"name":"Farmácia Vitória","type":"pharmacy","address":"Av. de Almeida Ribeiro 78"},"geometry":{"type":"Point","coordinates":[113.5435,22.1935]}},
+{"type":"Feature","properties":{"name":"Farmácia Kin Heng","type":"pharmacy","address":"Rua de Cinco de Outubro 15"},"geometry":{"type":"Point","coordinates":[113.5410,22.1940]}},
+{"type":"Feature","properties":{"name":"Farmácia N.S. Fátima","type":"pharmacy","address":"Rua do Almirante Costa Cabral"},"geometry":{"type":"Point","coordinates":[113.5480,22.2020]}},
+{"type":"Feature","properties":{"name":"Farmácia San Kei","type":"pharmacy","address":"Av. de Horta e Costa 30"},"geometry":{"type":"Point","coordinates":[113.5445,22.2010]}},
+{"type":"Feature","properties":{"name":"Farmácia Patane","type":"pharmacy","address":"Rua da Tercena 8"},"geometry":{"type":"Point","coordinates":[113.5358,22.1975]}},
+{"type":"Feature","properties":{"name":"Farmácia Luen Heng","type":"pharmacy","address":"Rua do Campo 55"},"geometry":{"type":"Point","coordinates":[113.5460,22.1965]}},
+{"type":"Feature","properties":{"name":"Dr. Chan Medical","type":"doctor","address":"Av. de Horta e Costa 12"},"geometry":{"type":"Point","coordinates":[113.5442,22.1995]}},
+{"type":"Feature","properties":{"name":"Dr. Wong Surgery","type":"doctor","address":"Rua de Pedro Coutinho 5"},"geometry":{"type":"Point","coordinates":[113.5470,22.1970]}},
+{"type":"Feature","properties":{"name":"Dr. Li Family Clinic","type":"doctor","address":"Rua de Francisco Xavier Pereira"},"geometry":{"type":"Point","coordinates":[113.5420,22.1970]}},
+{"type":"Feature","properties":{"name":"Dentista Sorriso Macau","type":"dentist","address":"Av. de Almeida Ribeiro 100"},"geometry":{"type":"Point","coordinates":[113.5455,22.1930]}},
+{"type":"Feature","properties":{"name":"Clínica Dental Brilhante","type":"dentist","address":"Rua de Pedro Nolasco da Silva"},"geometry":{"type":"Point","coordinates":[113.5490,22.1955]}},
+{"type":"Feature","properties":{"name":"Macau Dental Care","type":"dentist","address":"Rua do Dr. Pedro José Lobo"},"geometry":{"type":"Point","coordinates":[113.5425,22.1915]}},
+{"type":"Feature","properties":{"name":"Centro Audiológico Macau","type":"audiologist","address":"Rua do Campo 30"},"geometry":{"type":"Point","coordinates":[113.5448,22.1955]}},
+{"type":"Feature","properties":{"name":"Macau Hearing Center","type":"audiologist","address":"Av. Conselheiro Ferreira de Almeida 22"},"geometry":{"type":"Point","coordinates":[113.5458,22.1982]}},
+{"type":"Feature","properties":{"name":"Centro de Sangue de Macau","type":"blood_donation","address":"Estrada do Visconde de S. Januário"},"geometry":{"type":"Point","coordinates":[113.5472,22.1938]}},
+{"type":"Feature","properties":{"name":"Posto Doação Kiang Wu","type":"blood_donation","address":"Rua de Coelho do Amaral 10"},"geometry":{"type":"Point","coordinates":[113.5420,22.1990]}},
+{"type":"Feature","properties":{"name":"Hospício Macau Care","type":"hospice","address":"Rua de Tomás Vieira"},"geometry":{"type":"Point","coordinates":[113.5380,22.2005]}},
+{"type":"Feature","properties":{"name":"Casa de Repouso S. José","type":"hospice","address":"Calçada da Igreja de S. Lázaro"},"geometry":{"type":"Point","coordinates":[113.5408,22.1965]}},
+{"type":"Feature","properties":{"name":"Laboratório Central Macau","type":"laboratory","address":"Rua de S. Domingos 15"},"geometry":{"type":"Point","coordinates":[113.5410,22.1950]}},
+{"type":"Feature","properties":{"name":"Lab Diagnóstico Fátima","type":"laboratory","address":"Av. do Almirante Lacerda"},"geometry":{"type":"Point","coordinates":[113.5500,22.2045]}}
+]};
+
+var rData={"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"Ponte Gov. Nobre de Carvalho","type":"motorway","desc":"Akses tol Jembatan Macau-Taipa"},"geometry":{"type":"LineString","coordinates":[[113.549,22.187],[113.551,22.190],[113.552,22.194],[113.5525,22.197]]}},
+{"type":"Feature","properties":{"name":"Av. de Almeida Ribeiro","type":"primary","desc":"Jalan utama pusat kota"},"geometry":{"type":"LineString","coordinates":[[113.535,22.192],[113.538,22.193],[113.542,22.1935],[113.546,22.193],[113.549,22.1925]]}},
+{"type":"Feature","properties":{"name":"Av. do Infante D. Henrique","type":"primary","desc":"Jalan pesisir timur"},"geometry":{"type":"LineString","coordinates":[[113.549,22.188],[113.5505,22.192],[113.551,22.196],[113.5515,22.200],[113.552,22.204]]}},
+{"type":"Feature","properties":{"name":"Av. de Horta e Costa","type":"primary","desc":"Jalan utara-selatan tengah"},"geometry":{"type":"LineString","coordinates":[[113.544,22.195],[113.5442,22.198],[113.5445,22.201],[113.5448,22.204],[113.545,22.207]]}},
+{"type":"Feature","properties":{"name":"Av. Conselheiro F. de Almeida","type":"secondary","desc":"Jalan menuju Tap Seac"},"geometry":{"type":"LineString","coordinates":[[113.542,22.1935],[113.5435,22.1955],[113.545,22.1975],[113.5465,22.1995]]}},
+{"type":"Feature","properties":{"name":"Av. do Almirante Lacerda","type":"secondary","desc":"Jalan utama area utara"},"geometry":{"type":"LineString","coordinates":[[113.544,22.205],[113.546,22.2055],[113.548,22.205],[113.550,22.2045],[113.552,22.204]]}},
+{"type":"Feature","properties":{"name":"Rua de Cinco de Outubro","type":"tertiary","desc":"Jalan bersejarah pusat kota"},"geometry":{"type":"LineString","coordinates":[[113.5385,22.1915],[113.540,22.192],[113.542,22.1935],[113.5435,22.1945]]}},
+{"type":"Feature","properties":{"name":"Rua do Campo","type":"tertiary","desc":"Jalan perdagangan"},"geometry":{"type":"LineString","coordinates":[[113.5425,22.196],[113.544,22.1965],[113.5455,22.196],[113.547,22.1955]]}},
+{"type":"Feature","properties":{"name":"Rua Nova do Patane","type":"residential","desc":"Jalan pemukiman Patane"},"geometry":{"type":"LineString","coordinates":[[113.534,22.200],[113.5355,22.201],[113.537,22.2025],[113.538,22.204]]}},
+{"type":"Feature","properties":{"name":"Rua da Tercena","type":"residential","desc":"Jalan pemukiman Tercena"},"geometry":{"type":"LineString","coordinates":[[113.5348,22.196],[113.5358,22.197],[113.5365,22.1985],[113.537,22.200]]}}
+]};
+
+var innerDots=L.layerGroup();
+var roadLayer=L.geoJSON(rData,{
+style:function(f){return{color:'#888',weight:RW[f.properties.type]||2,opacity:0.7,lineJoin:'round',lineCap:'round'};},
+onEachFeature:function(f,ly){
+var p=f.properties;
+ly.bindPopup('<table class="popup-tbl"><caption>'+p.name+'</caption><tr><td>Kategori</td><td><span class="popup-badge" style="background:rgba(150,150,150,0.2);color:#94a3b8">'+p.type+'</span></td></tr><tr><td>Keterangan</td><td>'+p.desc+'</td></tr></table>',{maxWidth:260});
+ly.on('mouseover',function(){this.setStyle({weight:(RW[p.type]||2)+3,opacity:1,color:'#6366f1'});});
+ly.on('mouseout',function(){roadLayer.resetStyle(this);});
+}
+}).addTo(map);
+
+var markers=[];
+var healthLayer=L.geoJSON(hData,{
+pointToLayer:function(f,ll){
+var c=TC[f.properties.type]||'#fff';
+L.circleMarker(ll,{radius:3,fillColor:'#000',fillOpacity:0.9,color:'#000',weight:0,interactive:false}).addTo(innerDots);
+return L.circleMarker(ll,{radius:9,fillColor:c,fillOpacity:0.85,color:'#1e293b',weight:2});
+},
+onEachFeature:function(f,ly){
+var p=f.properties;var co=f.geometry.coordinates;
+var gl='https://www.google.com/maps?q='+co[1]+','+co[0];
+var bs='background:'+TC[p.type]+'33;color:'+TC[p.type];
+ly.bindPopup('<table class="popup-tbl"><caption>'+p.name+'</caption><tr><td>Kategori</td><td><span class="popup-badge" style="'+bs+'">'+(TL[p.type]||p.type)+'</span></td></tr><tr><td>Alamat</td><td>'+p.address+'</td></tr><tr><td>Maps</td><td><a href="'+gl+'" target="_blank" style="color:#818cf8;text-decoration:none">&#128205; Buka Google Maps</a></td></tr></table>',{maxWidth:280});
+markers.push({name:p.name,type:p.type,address:p.address,lat:co[1],lng:co[0],layer:ly});
+}
+}).addTo(map);
+innerDots.addTo(map);
+
+var sH=0,sC=0,sP=0;
+hData.features.forEach(function(f){var t=f.properties.type;if(t==='hospital')sH++;if(t==='clinic')sC++;if(t==='pharmacy')sP++;});
+document.getElementById('sH').textContent=sH;
+document.getElementById('sC').textContent=sC;
+document.getElementById('sP').textContent=sP;
+
+function renderResults(list){
+var el=document.getElementById('resultsList');
+if(!list.length){el.innerHTML='<div style="text-align:center;padding:20px;color:#475569;font-size:12px">Tidak ada hasil</div>';return;}
+el.innerHTML='';
+list.forEach(function(m){
+var d=document.createElement('div');d.className='result-item';
+d.innerHTML='<div class="result-dot" style="background:'+TC[m.type]+'"></div><div><div class="result-name">'+m.name+'</div><div class="result-type">'+(TL[m.type]||m.type)+'</div></div>';
+d.addEventListener('click',function(){map.flyTo([m.lat,m.lng],17,{duration:1.5});setTimeout(function(){m.layer.openPopup();},1600);});
+el.appendChild(d);
+});
+}
+renderResults(markers);
+
+document.getElementById('searchInput').addEventListener('input',function(){
+var q=this.value.toLowerCase().trim();
+if(!q){renderResults(markers);return;}
+renderResults(markers.filter(function(m){return m.name.toLowerCase().indexOf(q)!==-1||(TL[m.type]||'').toLowerCase().indexOf(q)!==-1;}));
+});
+
+L.control.layers(null,{"Fasilitas Kesehatan":healthLayer,"Jaringan Jalan":roadLayer},{position:'topright',collapsed:true}).addTo(map);
+</script>
+</body>
+</html>
